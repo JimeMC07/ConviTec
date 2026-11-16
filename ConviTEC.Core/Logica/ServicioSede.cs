@@ -323,7 +323,7 @@ namespace ConviTEC.Core.Logica
             global.Actualizar(Sede.Codigo, item.Producto, item.Disponible);
         }
 
-        private async Task DifundirCambioAsync(string codigoProducto)
+        public async Task DifundirCambioAsync(string codigoProducto)
         {
             ItemInventario? item;
             lock (candado) item = inventario!.Consultar(codigoProducto);

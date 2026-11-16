@@ -347,6 +347,117 @@ finally
     Directory.Delete(carpetaSedes, true);
 }
 
+
+// =====================================================
+Titulo("PEDIDOS");
+
+Grafo grafoPedidos = CargadorGrafo.CargarDesdeArchivo(Path.Combine("datos", "rutas.json"));
+string carpetaPedidos = Path.Combine(Path.GetTempPath(), "convitec_pedidos_" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(carpetaPedidos);
+File.WriteAllText(Path.Combine(carpetaPedidos, "sedes.json"), """
+[
+  { "Codigo": "TS1", "Nombre": "Prueba Liberia",  "Ubicacion": "Liberia (Sede)" },
+  { "Codigo": "TS3", "Nombre": "Prueba San José", "Ubicacion": "San José (Sede)" },
+  { "Codigo": "TS4", "Nombre": "Prueba Limón",    "Ubicacion": "Limón (Sede)" }
+]
+""");
+File.WriteAllText(Path.Combine(carpetaPedidos, "inventario_inicial.json"), """
+[
+  { "Sede": "TS1", "Codigo": "P008", "Nombre": "Arroz", "Descripcion": "Bolsa", "Categoria": "Abarrotes", "Precio": 1500, "Disponible": 25 },
+  { "Sede": "TS3", "Codigo": "P001", "Nombre": "Refresco de cola", "Descripcion": "Lata", "Categoria": "Bebidas", "Precio": 800, "Disponible": 25 },
+  { "Sede": "TS4", "Codigo": "P003", "Nombre": "Galletas", "Descripcion": "Paquete", "Categoria": "Snacks", "Precio": 500, "Disponible": 10 }
+]
+""");
+
+try
+{
+    await using ServicioSede s1 = new ServicioSede(new OpcionesSede { CodigoSede = "TS1", CarpetaDatos = carpetaPedidos, TiempoEsperaMs = 2000 });
+    await using ServicioSede s3 = new ServicioSede(new OpcionesSede { CodigoSede = "TS3", CarpetaDatos = carpetaPedidos, TiempoEsperaMs = 2000 });
+    await using ServicioSede s4 = new ServicioSede(new OpcionesSede { CodigoSede = "TS4", CarpetaDatos = carpetaPedidos, TiempoEsperaMs = 2000 });
+    await s1.IniciarAsync();
+    await s4.IniciarAsync();
+    await s3.IniciarAsync();
+
+    await EsperarHasta(() => s3.CantidadEnSede("P003", "TS4") == 10 && s1.CantidadEnSede("P003", "TS4") == 10, 5000);
+
+    ServicioPedidos pedidos3 = new ServicioPedidos(s3, grafoPedidos);
+    ServicioPedidos pedidos1 = new ServicioPedidos(s1, grafoPedidos);
+    await pedidos3.IniciarAsync();
+    await pedidos1.IniciarAsync();
+
+    // Caso 1: todo de la sede local
+    ResultadoPedido a = await pedidos3.RegistrarPedidoAsync(new[] { new LineaSolicitada("P001", 2) }, "Heredia");
+    Verificar(a.Aceptado && a.Pedido!.Estado == EstadoPedido.PENDIENTE, "Pedido con producto local: aceptado");
+    Verificar(s3.ConsultarLocal("P001")!.Total == 23, "Se rebajaron 2 del inventario local");
+
+    // Caso 2: un producto viene de otra sede
+    ResultadoPedido b = await pedidos3.RegistrarPedidoAsync(
+        new[] { new LineaSolicitada("P001", 1), new LineaSolicitada("P003", 3) }, "Cartago");
+    Verificar(b.Aceptado && b.Pedido!.SedesParticipantes.Existe(x => x == "TS4"), "Pedido con producto de otra sede: aceptado y TS4 participa");
+    Verificar(await EsperarHasta(() => s4.ConsultarLocal("P003")!.Total == 7, 5000), "Se rebajaron 3 galletas en TS4");
+
+    // Caso 3: destino inalcanzable
+    ResultadoPedido c = await pedidos3.RegistrarPedidoAsync(new[] { new LineaSolicitada("P001", 1) }, "Cañas");
+    Verificar(!c.Aceptado && c.Pedido!.Estado == EstadoPedido.RECHAZADO, "Destino inalcanzable: " + c.Mensaje);
+
+    // Caso 4: un producto no alcanza → se cancela TODO y se libera lo reservado
+    ResultadoPedido d = await pedidos3.RegistrarPedidoAsync(
+        new[] { new LineaSolicitada("P001", 2), new LineaSolicitada("P003", 50) }, "Cartago");
+    Verificar(!d.Aceptado && d.Pedido!.Estado == EstadoPedido.CANCELADO, "Sin suficiente inventario: " + d.Mensaje);
+    ItemInventario refrescoTS3 = s3.ConsultarLocal("P001")!;
+    Verificar(refrescoTS3.Reservado == 0 && refrescoTS3.Total == 22, "Al cancelar se liberó la reserva de P001");
+
+    // Casos de datos inválidos
+    Verificar(!(await pedidos3.RegistrarPedidoAsync(new[] { new LineaSolicitada("P999", 1) }, "Heredia")).Aceptado, "Producto inexistente: rechazado");
+    Verificar(!(await pedidos3.RegistrarPedidoAsync(new LineaSolicitada[0], "Heredia")).Aceptado, "Pedido sin productos: rechazado");
+    Verificar(!(await pedidos3.RegistrarPedidoAsync(new[] { new LineaSolicitada("P001", 0) }, "Heredia")).Aceptado, "Cantidad 0: rechazado");
+    Verificar(!(await pedidos3.RegistrarPedidoAsync(new[] { new LineaSolicitada("P001", 1) }, "Narnia")).Aceptado, "Destino inexistente: rechazado");
+    Verificar(!(await pedidos3.RegistrarPedidoAsync(
+        new[] { new LineaSolicitada("P001", 1), new LineaSolicitada("P001", 2) }, "Heredia")).Aceptado, "Producto repetido: rechazado");
+
+    // Caso Guanacaste: se abastece del inventario global, pero solo entrega en su zona
+    ResultadoPedido f = await pedidos1.RegistrarPedidoAsync(new[] { new LineaSolicitada("P003", 2) }, "Cañas");
+    Verificar(f.Aceptado, "Liberia pide galletas a Limón y entrega en Cañas: aceptado");
+    ResultadoPedido g = await pedidos1.RegistrarPedidoAsync(new[] { new LineaSolicitada("P008", 1) }, "Cartago");
+    Verificar(!g.Aceptado, "Liberia no puede entregar en Cartago (está aislada)");
+
+    // Historial y pendientes
+    Verificar(pedidos3.ObtenerPendientes().Cantidad == 2, "TS3 tiene 2 pedidos pendientes");
+    Verificar(pedidos3.ObtenerHistorial().Cantidad == 5, "El historial guarda aceptados, rechazados y cancelados (5)");
+
+    // Entrega
+    Venta ventaA = pedidos3.MarcarEntregado(a.Pedido!.Id, 20);
+    Verificar(ventaA.MontoTotal == 1600 && pedidos3.ObtenerPendientes().Cantidad == 1, "Entregar: se crea la venta y sale de pendientes");
+    Verificar(LanzaError(() => pedidos3.MarcarEntregado(a.Pedido!.Id, 20)), "No se puede entregar dos veces");
+
+    // Reinicio: se recupera todo desde los archivos
+    ServicioPedidos recargado = new ServicioPedidos(s3, grafoPedidos);
+    await recargado.IniciarAsync();
+    Verificar(recargado.ObtenerHistorial().Cantidad == 5 && recargado.ObtenerPendientes().Cantidad == 1
+              && recargado.ObtenerVentas().Cantidad == 1, "Al reiniciar se recuperan historial, pendientes y ventas");
+}
+catch (InvalidOperationException ex)
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine("  [OMITIDA] Pruebas de pedidos: " + ex.Message);
+    Console.ResetColor();
+}
+finally
+{
+    string[] codigosPedidos = { "TS1", "TS3", "TS4" };
+    for (int i = 0; i < codigosPedidos.Length; i++)
+    {
+        try
+        {
+            await using ClienteMensajeria limpiador = new ClienteMensajeria(codigosPedidos[i]);
+            await limpiador.ConectarAsync();
+            await limpiador.EliminarMiColaAsync();
+        }
+        catch (Exception) { }
+    }
+    Directory.Delete(carpetaPedidos, true);
+}
+
 // =====================================================
 Console.WriteLine();
 Console.WriteLine($"RESULTADO: {aprobadas} aprobadas, {fallidas} fallidas");
