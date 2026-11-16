@@ -2,6 +2,7 @@
 using ConviTEC.Core.Logica;
 using ConviTEC.Core.Modelos;
 using ConviTEC.Core.Persistencia;
+using ConviTEC.Core.Rutas;
 
 int aprobadas = 0;
 int fallidas = 0;
@@ -151,6 +152,27 @@ File.WriteAllText(Path.Combine(carpeta, "inventario.json"), "{esto no es json");
 Verificar(LanzaError(() => repoInventario.Cargar("S3")), "Archivo dañado: da error claro");
 
 Directory.Delete(carpeta, true);   // limpiar los archivos de prueba
+
+
+// =====================================================
+Titulo("GRAFO Y DIJKSTRA");
+Grafo grafo = CargadorGrafo.CargarDesdeArchivo(Path.Combine("datos", "rutas.json"));
+Verificar(grafo.CantidadVertices == 13, "Se cargan las 13 ubicaciones del JSON");
+Verificar(grafo.HayRutaDirecta("Cartago", "San José (Sede)"), "Las rutas son de ida y vuelta");
+Verificar(!grafo.AgregarRuta("Cartago", "Paraíso", 15), "Una ruta duplicada se rechaza");
+Verificar(LanzaError(() => grafo.AgregarRuta("A", "B", 0)), "Una ruta con tiempo 0 da error");
+
+ResultadoDijkstra desdeSJ = Dijkstra.Calcular(grafo, "San José (Sede)");
+Verificar(desdeSJ.TiempoA("San José (Sede)") == 0, "Del origen a sí mismo = 0 min");
+Verificar(desdeSJ.TiempoA("Heredia") == 20, "San José → Heredia = 20 min");
+Verificar(desdeSJ.TiempoA("Limón (Sede)") == 180, "San José → Limón = 180 min (por Cartago)");
+Verificar(desdeSJ.CaminoA("Limón (Sede)").Cantidad == 5, "El camino a Limón pasa por 5 lugares");
+Verificar(!desdeSJ.EsAlcanzable("Liberia (Sede)") && desdeSJ.TiempoA("Liberia (Sede)") == -1, "Liberia es inalcanzable desde San José");
+Verificar(desdeSJ.CaminoA("Liberia (Sede)").EstaVacia(), "Camino a un inalcanzable: lista vacía");
+
+ResultadoDijkstra desdeLiberia = Dijkstra.Calcular(grafo, "Liberia (Sede)");
+Verificar(desdeLiberia.TiempoA("Cañas") == 65 && !desdeLiberia.EsAlcanzable("Limón (Sede)"), "Liberia solo llega a Cañas");
+Verificar(LanzaError(() => Dijkstra.Calcular(grafo, "Narnia")), "Un origen inexistente da error");
 
 // =====================================================
 Console.WriteLine();
