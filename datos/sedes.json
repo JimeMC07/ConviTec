@@ -1,0 +1,6 @@
+[
+  { "Codigo": "S1", "Nombre": "Liberia",  "Ubicacion": "Liberia (Sede)" },
+  { "Codigo": "S2", "Nombre": "Alajuela", "Ubicacion": "Alajuela (Sede)" },
+  { "Codigo": "S3", "Nombre": "San José", "Ubicacion": "San José (Sede)" },
+  { "Codigo": "S4", "Nombre": "Limón",    "Ubicacion": "Limón (Sede)" }
+]

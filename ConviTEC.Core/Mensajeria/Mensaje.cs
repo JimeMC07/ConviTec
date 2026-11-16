@@ -14,7 +14,8 @@ namespace ConviTEC.Core.Mensajeria
         RESPUESTA_RESERVA,
         CONFIRMAR_RESERVA,
         LIBERAR_RESERVA,
-        ACTUALIZACION_INVENTARIO
+        ACTUALIZACION_INVENTARIO,
+        SOLICITAR_INVENTARIO
     }
 
     /// <summary>
@@ -140,6 +141,17 @@ namespace ConviTEC.Core.Mensajeria
                 Descripcion = producto.Descripcion,
                 Categoria = producto.Categoria,
                 Precio = producto.Precio
+            };
+        }
+
+        // Pregunta a TODAS las sedes qué inventario tienen (al encender una sede)
+        public static Mensaje SolicitarInventario(string sedeOrigen)
+        {
+            return new Mensaje
+            {
+                Tipo = TipoMensaje.SOLICITAR_INVENTARIO,
+                SedeOrigen = sedeOrigen,
+                SedeDestino = ""
             };
         }
 

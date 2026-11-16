@@ -1,0 +1,20 @@
+[
+  { "Sede": "S1", "Codigo": "P001", "Nombre": "Refresco de cola", "Descripcion": "Lata 355 ml", "Categoria": "Bebidas", "Precio": 800, "Disponible": 20 },
+  { "Sede": "S1", "Codigo": "P002", "Nombre": "Agua embotellada", "Descripcion": "Botella 600 ml", "Categoria": "Bebidas", "Precio": 600, "Disponible": 30 },
+  { "Sede": "S1", "Codigo": "P003", "Nombre": "Galletas de vainilla", "Descripcion": "Paquete 120 g", "Categoria": "Snacks", "Precio": 500, "Disponible": 15 },
+  { "Sede": "S1", "Codigo": "P008", "Nombre": "Arroz", "Descripcion": "Bolsa 1.8 kg", "Categoria": "Abarrotes", "Precio": 1500, "Disponible": 25 },
+
+  { "Sede": "S2", "Codigo": "P001", "Nombre": "Refresco de cola", "Descripcion": "Lata 355 ml", "Categoria": "Bebidas", "Precio": 800, "Disponible": 10 },
+  { "Sede": "S2", "Codigo": "P004", "Nombre": "Papas tostadas", "Descripcion": "Bolsa 150 g", "Categoria": "Snacks", "Precio": 700, "Disponible": 18 },
+  { "Sede": "S2", "Codigo": "P005", "Nombre": "Leche entera", "Descripcion": "Caja 1 L", "Categoria": "Lácteos", "Precio": 1100, "Disponible": 12 },
+
+  { "Sede": "S3", "Codigo": "P001", "Nombre": "Refresco de cola", "Descripcion": "Lata 355 ml", "Categoria": "Bebidas", "Precio": 800, "Disponible": 25 },
+  { "Sede": "S3", "Codigo": "P002", "Nombre": "Agua embotellada", "Descripcion": "Botella 600 ml", "Categoria": "Bebidas", "Precio": 600, "Disponible": 20 },
+  { "Sede": "S3", "Codigo": "P005", "Nombre": "Leche entera", "Descripcion": "Caja 1 L", "Categoria": "Lácteos", "Precio": 1100, "Disponible": 8 },
+  { "Sede": "S3", "Codigo": "P006", "Nombre": "Pan cuadrado", "Descripcion": "Bolsa 500 g", "Categoria": "Panadería", "Precio": 1800, "Disponible": 10 },
+  { "Sede": "S3", "Codigo": "P007", "Nombre": "Café molido", "Descripcion": "Bolsa 250 g", "Categoria": "Abarrotes", "Precio": 3500, "Disponible": 6 },
+
+  { "Sede": "S4", "Codigo": "P002", "Nombre": "Agua embotellada", "Descripcion": "Botella 600 ml", "Categoria": "Bebidas", "Precio": 600, "Disponible": 15 },
+  { "Sede": "S4", "Codigo": "P003", "Nombre": "Galletas de vainilla", "Descripcion": "Paquete 120 g", "Categoria": "Snacks", "Precio": 500, "Disponible": 10 },
+  { "Sede": "S4", "Codigo": "P006", "Nombre": "Pan cuadrado", "Descripcion": "Bolsa 500 g", "Categoria": "Panadería", "Precio": 1800, "Disponible": 7 }
+]
