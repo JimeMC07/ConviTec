@@ -139,6 +139,17 @@ namespace ConviTEC.Core.Modelos
             FechaEntrega = fechaEntrega;
         }
 
+        // ---- Restaurar el estado al cargar desde archivo ----
+        // SOLO lo usa la persistencia. No revisa las reglas de cambio de estado
+        // porque el pedido ya había pasado por ellas antes de guardarse.
+        public void Restaurar(EstadoPedido estado, string motivo, int tiempoTraslado, DateTime? fechaEntrega)
+        {
+            Estado = estado;
+            Motivo = motivo ?? "";
+            TiempoTraslado = tiempoTraslado < 0 ? 0 : tiempoTraslado;
+            FechaEntrega = fechaEntrega;
+        }
+
         // ---- Texto para mostrar el pedido ----
         public override string ToString()
         {
