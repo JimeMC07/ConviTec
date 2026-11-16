@@ -3,6 +3,7 @@ using ConviTEC.Core.Logica;
 using ConviTEC.Core.Modelos;
 using ConviTEC.Core.Persistencia;
 using ConviTEC.Core.Rutas;
+using ConviTEC.Core.Mensajeria;
 
 int aprobadas = 0;
 int fallidas = 0;
@@ -173,6 +174,91 @@ Verificar(desdeSJ.CaminoA("Liberia (Sede)").EstaVacia(), "Camino a un inalcanzab
 ResultadoDijkstra desdeLiberia = Dijkstra.Calcular(grafo, "Liberia (Sede)");
 Verificar(desdeLiberia.TiempoA("Cañas") == 65 && !desdeLiberia.EsAlcanzable("Limón (Sede)"), "Liberia solo llega a Cañas");
 Verificar(LanzaError(() => Dijkstra.Calcular(grafo, "Narnia")), "Un origen inexistente da error");
+
+
+// =====================================================
+Titulo("MENSAJERÍA (RabbitMQ)");
+
+// Espera (máximo X milisegundos) a que algo se cumpla
+async Task<bool> EsperarHasta(Func<bool> condicion, int milisegundos)
+{
+    int esperado = 0;
+    while (!condicion() && esperado < milisegundos)
+    {
+        await Task.Delay(100);
+        esperado += 100;
+    }
+    return condicion();
+}
+
+// Conectar a un puerto donde no hay RabbitMQ debe dar un error claro
+bool falloConexion = false;
+try
+{
+    await using ClienteMensajeria falso = new ClienteMensajeria("FALSO", "localhost", 5999);
+    await falso.ConectarAsync();
+}
+catch (InvalidOperationException) { falloConexion = true; }
+Verificar(falloConexion, "Conectar a un servidor inexistente da error claro");
+
+try
+{
+    await using ClienteMensajeria sede1 = new ClienteMensajeria("PRUEBA1");
+    await using ClienteMensajeria sede2 = new ClienteMensajeria("PRUEBA2");
+    await sede1.ConectarAsync();
+    await sede2.ConectarAsync();
+
+    Lista<Mensaje> recibidos1 = new Lista<Mensaje>();
+    Lista<Mensaje> recibidos2 = new Lista<Mensaje>();
+
+    // PRUEBA1 solo guarda lo que le llega
+    await sede1.EscucharAsync(m =>
+    {
+        lock (recibidos1) recibidos1.Agregar(m);
+        return Task.CompletedTask;
+    });
+
+    // PRUEBA2 guarda lo que le llega y, si es una solicitud, la responde
+    await sede2.EscucharAsync(async m =>
+    {
+        lock (recibidos2) recibidos2.Agregar(m);
+        if (m.Tipo == TipoMensaje.SOLICITUD_RESERVA)
+            await sede2.EnviarAsync(Mensaje.RespuestaReserva(m, "PRUEBA2", true, "Reserva hecha"));
+    });
+
+    // 1. Mensaje directo + respuesta
+    Mensaje solicitud = Mensaje.SolicitudReserva("PRUEBA1", "PRUEBA2", "P-0001", "P001", 3);
+    await sede1.EnviarAsync(solicitud);
+
+    bool llego = await EsperarHasta(() => { lock (recibidos2) return recibidos2.Existe(m => m.Id == solicitud.Id); }, 5000);
+    Verificar(llego, "PRUEBA2 recibe la solicitud de PRUEBA1");
+
+    bool respondio = await EsperarHasta(() => { lock (recibidos1) return recibidos1.Existe(m =>
+        m.Tipo == TipoMensaje.RESPUESTA_RESERVA && m.IdRespuestaA == solicitud.Id && m.Aceptado); }, 5000);
+    Verificar(respondio, "PRUEBA1 recibe la respuesta a SU solicitud");
+
+    // 2. Difusión a todas las sedes
+    Mensaje aviso = Mensaje.ActualizacionInventario("PRUEBA1", coca, 7);
+    await sede1.DifundirAsync(aviso);
+
+    bool llegoAviso = await EsperarHasta(() => { lock (recibidos2) return recibidos2.Existe(m => m.Id == aviso.Id); }, 5000);
+    Verificar(llegoAviso, "La difusión le llega a PRUEBA2");
+
+    await Task.Delay(500);
+    bool seRecibioASiMisma;
+    lock (recibidos1) seRecibioASiMisma = recibidos1.Existe(m => m.Id == aviso.Id);
+    Verificar(!seRecibioASiMisma, "Una sede ignora su propia difusión");
+
+    // Limpiar los buzones de prueba
+    await sede1.EliminarMiColaAsync();
+    await sede2.EliminarMiColaAsync();
+}
+catch (InvalidOperationException ex)
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine("  [OMITIDA] Pruebas de RabbitMQ: " + ex.Message);
+    Console.ResetColor();
+}
 
 // =====================================================
 Console.WriteLine();
