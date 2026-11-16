@@ -260,6 +260,93 @@ catch (InvalidOperationException ex)
     Console.ResetColor();
 }
 
+
+// =====================================================
+Titulo("CONFIGURACIÓN Y SERVICIO DE SEDE");
+
+Verificar(CargadorConfiguracion.CargarSedes(Path.Combine("datos", "sedes.json")).Cantidad == 4, "sedes.json real tiene 4 sedes");
+
+string carpetaSedes = Path.Combine(Path.GetTempPath(), "convitec_sedes_" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(carpetaSedes);
+File.WriteAllText(Path.Combine(carpetaSedes, "sedes.json"), """
+[
+  { "Codigo": "TS1", "Nombre": "Prueba Liberia",  "Ubicacion": "Liberia (Sede)" },
+  { "Codigo": "TS3", "Nombre": "Prueba San José", "Ubicacion": "San José (Sede)" },
+  { "Codigo": "TS4", "Nombre": "Prueba Limón",    "Ubicacion": "Limón (Sede)" }
+]
+""");
+File.WriteAllText(Path.Combine(carpetaSedes, "inventario_inicial.json"), """
+[
+  { "Sede": "TS3", "Codigo": "P001", "Nombre": "Refresco de cola", "Descripcion": "Lata", "Categoria": "Bebidas", "Precio": 800, "Disponible": 25 },
+  { "Sede": "TS4", "Codigo": "P003", "Nombre": "Galletas", "Descripcion": "Paquete", "Categoria": "Snacks", "Precio": 500, "Disponible": 10 }
+]
+""");
+
+Verificar(CargadorConfiguracion.CargarSedes(Path.Combine(carpetaSedes, "sedes.json")).Cantidad == 3, "Se cargan las sedes de prueba");
+Verificar(CargadorConfiguracion.CargarInventarioInicial(Path.Combine(carpetaSedes, "inventario_inicial.json"), "TS4")
+          .CantidadDisponible("P003") == 10, "Inventario inicial: TS4 tiene 10 galletas");
+
+try
+{
+    await using ServicioSede ts4 = new ServicioSede(new OpcionesSede { CodigoSede = "TS4", CarpetaDatos = carpetaSedes, TiempoEsperaMs = 2000 });
+    await using ServicioSede ts3 = new ServicioSede(new OpcionesSede { CodigoSede = "TS3", CarpetaDatos = carpetaSedes, TiempoEsperaMs = 2000 });
+    await ts4.IniciarAsync();
+    await ts3.IniciarAsync();
+
+    Verificar(await EsperarHasta(() => ts3.CantidadEnSede("P003", "TS4") == 10, 5000), "TS3 conoce el inventario de TS4 al iniciar");
+    Verificar(await EsperarHasta(() => ts4.CantidadEnSede("P001", "TS3") == 25, 5000), "TS4 conoce el inventario de TS3");
+
+    Mensaje? r1 = await ts3.SolicitarReservaRemotaAsync("TS4", "P-T1", "P003", 4);
+    Verificar(r1 != null && r1.Aceptado, "TS4 acepta reservar 4 galletas para TS3");
+    Verificar(ts4.ConsultarLocal("P003")!.Disponible == 6 && ts4.ConsultarLocal("P003")!.Reservado == 4, "En TS4 quedan 6 disponibles y 4 reservadas");
+    Verificar(await EsperarHasta(() => ts3.CantidadEnSede("P003", "TS4") == 6, 5000), "TS3 se entera de que a TS4 le quedan 6");
+
+    Mensaje? r2 = await ts3.SolicitarReservaRemotaAsync("TS4", "P-T2", "P003", 100);
+    Verificar(r2 != null && !r2.Aceptado, "TS4 rechaza reservar 100: " + r2?.Texto);
+
+    Mensaje? r3 = await ts3.SolicitarReservaRemotaAsync("TS4", "P-T3", "P999", 1);
+    Verificar(r3 != null && !r3.Aceptado, "TS4 rechaza un producto que no tiene");
+
+    await ts3.LiberarReservaRemotaAsync("TS4", "P-T1", "P003");
+    Verificar(await EsperarHasta(() => ts4.ConsultarLocal("P003")!.Disponible == 10, 5000), "Liberar: las 4 vuelven a disponible");
+
+    Mensaje? r4 = await ts3.SolicitarReservaRemotaAsync("TS4", "P-T4", "P003", 3);
+    await ts3.ConfirmarReservaRemotaAsync("TS4", "P-T4", "P003");
+    bool confirmado = await EsperarHasta(() => ts4.ConsultarLocal("P003")!.Total == 7, 5000);
+    Verificar(r4 != null && r4.Aceptado && confirmado, "Confirmar: las 3 salen del inventario (quedan 7)");
+
+    InventarioLocal guardado = new RepositorioInventario(Path.Combine(carpetaSedes, "TS4")).Cargar("TS4");
+    Verificar(guardado.CantidadDisponible("P003") == 7, "TS4 guardó los cambios en su archivo");
+
+    Mensaje? r5 = await ts3.SolicitarReservaRemotaAsync("TS1", "P-T5", "P001", 1);
+    Verificar(r5 == null, "Si la otra sede no responde, se agota el tiempo (null)");
+
+    await ts3.AgregarUnidadesAsync("P001", 5);
+    Verificar(await EsperarHasta(() => ts4.CantidadEnSede("P001", "TS3") == 30, 5000), "Agregar 5 unidades en TS3 se avisa a TS4");
+}
+catch (InvalidOperationException ex)
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine("  [OMITIDA] Pruebas del servicio de sede: " + ex.Message);
+    Console.ResetColor();
+}
+finally
+{
+    // Limpiar los buzones y archivos de prueba
+    string[] codigosPrueba = { "TS1", "TS3", "TS4" };
+    for (int i = 0; i < codigosPrueba.Length; i++)
+    {
+        try
+        {
+            await using ClienteMensajeria limpiador = new ClienteMensajeria(codigosPrueba[i]);
+            await limpiador.ConectarAsync();
+            await limpiador.EliminarMiColaAsync();
+        }
+        catch (Exception) { }
+    }
+    Directory.Delete(carpetaSedes, true);
+}
+
 // =====================================================
 Console.WriteLine();
 Console.WriteLine($"RESULTADO: {aprobadas} aprobadas, {fallidas} fallidas");
