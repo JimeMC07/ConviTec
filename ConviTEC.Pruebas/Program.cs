@@ -435,6 +435,26 @@ try
     await recargado.IniciarAsync();
     Verificar(recargado.ObtenerHistorial().Cantidad == 5 && recargado.ObtenerPendientes().Cantidad == 1
               && recargado.ObtenerVentas().Cantidad == 1, "Al reiniciar se recuperan historial, pendientes y ventas");
+
+    await recargado.RegistrarPedidoAsync([new("P001", 1)], "Cartago");
+    await recargado.RegistrarPedidoAsync([new("P001", 1)], "Heredia");
+    var entregas = new ServicioEntregas(recargado, s3);
+    var paso = entregas.Siguiente();
+    Verificar(paso.Visitadas == 1 && paso.MinutosTotales == 20, "Primera parada en Heredia a los 20 minutos");
+    var tardio = await recargado.RegistrarPedidoAsync([new("P001", 1)], s3.Sede.Ubicacion);
+    entregas = new ServicioEntregas(recargado, s3);
+    paso = entregas.Siguiente();
+    Verificar(paso.Terminado && paso.MinutosTotales == 85 && paso.Paradas[1].Pedidos.Length == 2,
+              "Reanuda el recorrido y entrega dos pedidos en Cartago a los 85 minutos");
+    Verificar(recargado.ObtenerPendientes().Cantidad == 1 && tardio.Aceptado, "El lote excluye el pedido posterior");
+    var horario = DateTime.Today.AddHours(15);
+    entregas.Despachar(horario);
+    entregas.Despachar(horario);
+    Verificar(recargado.ObtenerPendientes().EstaVacia() && recargado.ObtenerVentas().Cantidad == 5,
+              "La salida siguiente entrega el pedido tardío una sola vez");
+    var ranking = Estadisticas.Peores(recargado.ObtenerHistorial());
+    Verificar(ranking.Length == 5 && ranking[^1].Rendimiento == null && ranking[0].Rendimiento <= ranking[1].Rendimiento,
+              "Rendimientos ascendentes y entrega de cero minutos al final");
 }
 catch (InvalidOperationException ex)
 {
@@ -460,4 +480,25 @@ finally
 
 // =====================================================
 Console.WriteLine();
+Verificar(ServicioEntregas.Planificar(grafo, "San José", new()).Length == 0, "Recorrido sin pendientes");
+Verificar(Estadisticas.Estrellas(new()).EstaVacia() && Estadisticas.Peores(new()).Length == 0, "Estadísticas sin ventas");
+var ventasEmpate = new Lista<Venta>();
+var primera = new Venta("V1", "1", "S1", DateTime.Today);
+primera.AgregarLinea(new("A", "Arroz", 2, 100));
+primera.AgregarLinea(new("B", "Café", 1, 300));
+var segunda = new Venta("V2", "2", "S1", DateTime.Today);
+segunda.AgregarLinea(new("A", "Arroz", 1, 100));
+ventasEmpate.Agregar(primera);
+ventasEmpate.Agregar(segunda);
+var estrellas = Estadisticas.Estrellas(ventasEmpate);
+Verificar(estrellas.Cantidad == 2 && estrellas.Obtener(0).Ingresos == 300, "Empate de ingresos acumulados entre ventas");
+var numeros = new Lista<int>();
+int[] Ordenados() => Ordenamiento.PorMezcla(numeros, (x, y) => x.CompareTo(y));
+Verificar(Ordenados().Length == 0, "Merge sort con lista vacía");
+numeros.Agregar(2);
+Verificar(Ordenados()[0] == 2, "Merge sort con un elemento");
+numeros.Agregar(1);
+numeros.Agregar(2);
+Verificar(string.Join(",", Ordenados()) == "1,2,2", "Merge sort conserva valores repetidos");
 Console.WriteLine($"RESULTADO: {aprobadas} aprobadas, {fallidas} fallidas");
+Environment.ExitCode = fallidas == 0 ? 0 : 1;
