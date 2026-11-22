@@ -34,6 +34,13 @@ public class ServicioEntregas
 
     public Recorrido Estado() { lock (turno) return actual; }
 
+    public void ReanudarAutomatica()
+    {
+        lock (turno)
+            if (actual.Horario.HasValue)
+                while (!actual.Terminado) Avanzar();
+    }
+
     public static Parada[] Planificar(Grafo grafo, string origen, Lista<Pedido> pendientes)
     {
         var restantes = new Lista<Pedido>();

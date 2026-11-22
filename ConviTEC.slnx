@@ -2,4 +2,5 @@
   <Project Path="ConviTEC.Core/ConviTEC.Core.csproj" />
   <Project Path="ConviTEC.Pruebas/ConviTEC.Pruebas.csproj" />
   <Project Path="ConviTEC.Sede/ConviTEC.Sede.csproj" />
+  <Project Path="ConviTEC.Web/ConviTEC.Web.csproj" />
 </Solution>
