@@ -83,6 +83,8 @@ namespace ConviTEC.Core.Logica
             {
                 if (p.Estado == EstadoPedido.PENDIENTE)
                     pendientes.Encolar(p);   // la cola se reconstruye desde el historial
+                else if (p.Estado == EstadoPedido.ENTREGADO && !ventas.Existe(v => v.IdPedido == p.Id))
+                    ventas.Agregar(Venta.DesdePedido(p)); // Reinicio entre las dos escrituras del repositorio.
                 else if (p.Estado == EstadoPedido.EN_VALIDACION)
                 {
                     // Se cerró el programa a mitad de la validación: se cancela y se liberan sus reservas

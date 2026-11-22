@@ -480,7 +480,7 @@ finally
 
 // =====================================================
 Console.WriteLine();
-Verificar(ServicioEntregas.Planificar(grafo, "San José", new()).Length == 0, "Recorrido sin pendientes");
+Verificar(ServicioEntregas.CalcularParada(grafo, "San José (Sede)", new(), 0) == null, "Recorrido sin pendientes");
 Verificar(Estadisticas.Estrellas(new()).EstaVacia() && Estadisticas.Peores(new()).Length == 0, "Estadísticas sin ventas");
 var ventasEmpate = new Lista<Venta>();
 var primera = new Venta("V1", "1", "S1", DateTime.Today);

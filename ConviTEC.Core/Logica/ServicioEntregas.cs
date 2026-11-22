@@ -6,10 +6,10 @@ using ConviTEC.Core.Rutas;
 namespace ConviTEC.Core.Logica;
 
 public record Parada(string Destino, string[] Camino, int MinutosTramo, int MinutosAcumulados, string[] Pedidos);
-public record Recorrido(string Origen, DateTime? Horario, Parada[] Paradas, int Visitadas)
+public record Recorrido(string Origen, DateTime? Horario, Parada[] Paradas, int Visitadas, string[] Restantes)
 {
     public int MinutosTotales => Visitadas == 0 ? 0 : Paradas[Visitadas - 1].MinutosAcumulados;
-    public bool Terminado => Visitadas == Paradas.Length;
+    public bool Terminado => Restantes.Length == 0 && Visitadas == Paradas.Length;
 }
 
 public class ServicioEntregas
@@ -28,7 +28,7 @@ public class ServicioEntregas
         archivo = Path.Combine(sede.CarpetaSede, "recorrido.json");
         var registro = File.Exists(archivo)
             ? JsonSerializer.Deserialize<Registro>(File.ReadAllText(archivo)) : null;
-        actual = registro?.Actual ?? new Recorrido(sede.Sede.Ubicacion, null, [], 0);
+        actual = registro?.Actual ?? new Recorrido(sede.Sede.Ubicacion, null, [], 0, []);
         ultimaSalida = registro?.UltimaSalida;
     }
 
@@ -41,14 +41,9 @@ public class ServicioEntregas
                 while (!actual.Terminado) Avanzar();
     }
 
-    public static Parada[] Planificar(Grafo grafo, string origen, Lista<Pedido> pendientes)
+    public static Parada? CalcularParada(Grafo grafo, string origen, Lista<Pedido> restantes, int acumulado)
     {
-        var restantes = new Lista<Pedido>();
-        foreach (var pedido in pendientes) restantes.Agregar(pedido);
-        var paradas = new Lista<Parada>();
-        int total = 0;
-        while (!restantes.EstaVacia())
-        {
+            if (restantes.EstaVacia()) return null;
             var rutas = Dijkstra.Calcular(grafo, origen);
             Pedido? elegido = null;
             int minimo = int.MaxValue;
@@ -58,17 +53,12 @@ public class ServicioEntregas
                 int minutos = rutas.TiempoA(pedido.Destino);
                 if (minutos < minimo) { minimo = minutos; elegido = pedido; }
             }
-            if (elegido == null) break;
+            if (elegido == null) return null;
             string destino = elegido.Destino;
             var ids = new Lista<string>();
             foreach (var pedido in restantes)
                 if (pedido.Destino == destino) ids.Agregar(pedido.Id);
-            foreach (string id in ids) restantes.Eliminar(p => p.Id == id);
-            total = checked(total + minimo);
-            paradas.Agregar(new(destino, rutas.CaminoA(destino).ToArray(), minimo, total, ids.ToArray()));
-            origen = destino;
-        }
-        return paradas.ToArray();
+            return new(destino, rutas.CaminoA(destino).ToArray(), minimo, checked(acumulado + minimo), ids.ToArray());
     }
 
     public Recorrido Siguiente()
@@ -94,13 +84,32 @@ public class ServicioEntregas
 
     private void Iniciar(DateTime? horario)
     {
-        var paradas = Planificar(pedidos.Grafo, actual.Origen, pedidos.ObtenerPendientes());
-        Guardar(new(actual.Origen, horario, paradas, 0), horario ?? ultimaSalida);
+        var ids = new Lista<string>();
+        foreach (var pedido in pedidos.ObtenerPendientes()) ids.Agregar(pedido.Id);
+        Guardar(new(actual.Origen, horario, [], 0, ids.ToArray()), horario ?? ultimaSalida);
     }
 
     private void Avanzar()
     {
         if (actual.Terminado) return;
+        if (actual.Visitadas == actual.Paradas.Length)
+        {
+            var pendientes = new Lista<Pedido>();
+            foreach (string id in actual.Restantes)
+                if (pedidos.ConsultarPedido(id) is { Estado: EstadoPedido.PENDIENTE } pedido)
+                    pendientes.Agregar(pedido);
+            string origen = actual.Visitadas == 0 ? actual.Origen : actual.Paradas[^1].Destino;
+            var proxima = CalcularParada(pedidos.Grafo, origen, pendientes, actual.MinutosTotales);
+            if (proxima == null)
+            {
+                Guardar(actual with { Restantes = [] }, ultimaSalida);
+                return;
+            }
+            var restantes = new Lista<string>();
+            foreach (var pedido in pendientes)
+                if (pedido.Destino != proxima.Destino) restantes.Agregar(pedido.Id);
+            Guardar(actual with { Paradas = [.. actual.Paradas, proxima], Restantes = restantes.ToArray() }, ultimaSalida);
+        }
         var parada = actual.Paradas[actual.Visitadas];
         foreach (string id in parada.Pedidos)
             if (pedidos.ConsultarPedido(id)?.Estado == EstadoPedido.PENDIENTE)
